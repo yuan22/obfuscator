@@ -7,93 +7,65 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:  # 允许手动触发
-    inputs:
-      build_type:
-        description: 'Build type (Release/Debug)'
-        required: true
-        default: 'Release'
 
 jobs:
   build:
     runs-on: ubuntu-latest  # 使用 Ubuntu 最新环境构建
 
     steps:
-      # Step 1: 检出代码
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # Step 1: 检出代码
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-      # Step 2: 安装依赖
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            ninja-build \
-            clang \
-            lld \
-            python3 \
-            git \
-            zlib1g-dev \
-            libncurses5-dev
+    # Step 2: 安装依赖
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          clang \
+          python3 \
+          git
 
-      # Step 3: 克隆 LLVM 10.0.0
-      - name: Clone LLVM 10.0.0
-        run: |
-          git clone --branch release/10.x https://github.com/llvm/llvm-project.git
-          cd llvm-project
-          mkdir build && cd build
+    # Step 3: 克隆 obfuscator 仓库，并检出特定分支
+    - name: Clone obfuscator-llvm repository
+      run: |
+        git clone -b llvm-4.0 https://github.com/obfuscator-llvm/obfuscator.git
+        cd obfuscator
+        git submodule update --init --recursive
 
-      # Step 4: 克隆 Obfuscator-LLVM 并放入 LLVM 的 projects 目录
-      - name: Clone Obfuscator-LLVM
-        run: |
-          cd ../..
-          git clone https://github.com/obfuscator-llvm/obfuscator.git
-          mv obfuscator llvm-project/projects/obfuscator
+    # Step 4: 创建构建目录
+    - name: Create build directory
+      run: mkdir -p obfuscator/build
 
-      # Step 5: 配置 CMake (x86_64)
-      - name: Configure CMake (x86_64)
-        run: |
-          cd llvm-project/build
-          cmake -G "Ninja" ../llvm \
-            -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build_type || 'Release' }} \
-            -DLLVM_ENABLE_PROJECTS="clang;lld;obfuscator" \
-            -DLLVM_TARGETS_TO_BUILD="X86" \
-            -DLLVM_USE_LINKER=lld
+    # Step 5: 使用 cmake 配置构建
+    - name: Run cmake
+      run: |
+        cd obfuscator/build
+        cmake -DCMAKE_BUILD_TYPE=Release ../
 
-      # Step 6: 构建 Obfuscator-LLVM (x86_64)
-      - name: Build Obfuscator-LLVM (x86_64)
-        run: |
-          cd llvm-project/build
-          ninja
+    # Step 6: 执行构建
+    - name: Build the project
+      run: |
+        cd obfuscator/build
+        make -j7
 
-      # Step 7: 上传构建产物 (x86_64)
-      - name: Upload artifacts (x86_64)
-        uses: actions/upload-artifact@v3
-        with:
-          name: obfuscator-x86_64
-          path: llvm-project/build/bin/
+    # Step 7: 安装编译产物
+    - name: Install obfuscator-llvm
+      run: |
+        cd obfuscator/build
+        sudo make install
 
-      # Step 8: 配置 CMake (ARM64)
-      - name: Configure CMake (ARM64)
-        run: |
-          cd llvm-project/build
-          cmake -G "Ninja" ../llvm \
-            -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build_type || 'Release' }} \
-            -DLLVM_ENABLE_PROJECTS="clang;lld;obfuscator" \
-            -DLLVM_TARGETS_TO_BUILD="AArch64" \
-            -DLLVM_USE_LINKER=lld
+    # Step 8: 上传构建产物
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: obfuscator-llvm
+        path: obfuscator/build/obfuscator
 
-      # Step 9: 构建 Obfuscator-LLVM (ARM64)
-      - name: Build Obfuscator-LLVM (ARM64)
-        run: |
-          cd llvm-project/build
-          ninja
+    # Step 9: 验证是否安装成功
+    - name: Verify Installation
+      run: |
+        obfuscator-llvm --version
 
-      # Step 10: 上传构建产物 (ARM64)
-      - name: Upload artifacts (ARM64)
-        uses: actions/upload-artifact@v3
-        with:
-          name: obfuscator-arm64
-          path: llvm-project/build/bin/
