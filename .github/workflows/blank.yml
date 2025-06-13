@@ -1,23 +1,24 @@
 name: Build obfuscator-llvm
 
-# 控制何时触发此工作流
 on:
   push:
     branches:
-      - main  # 你可以选择你希望触发构建的分支
+      - main  # 可以修改为你的主要分支
   pull_request:
     branches:
       - main
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # 运行环境使用最新的 Ubuntu
+    runs-on: ubuntu-latest  # 使用 Ubuntu 最新环境构建
 
     steps:
+    # Step 1: 检出代码
     - name: Checkout code
-      uses: actions/checkout@v2  # 获取代码仓库
+      uses: actions/checkout@v2
 
-    - name: Set up dependencies
+    # Step 2: 安装依赖
+    - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -27,21 +28,36 @@ jobs:
           python3 \
           git
 
+    # Step 3: 克隆 obfuscator 仓库，并检出特定分支
     - name: Clone obfuscator-llvm repository
       run: |
-        git clone --recursive https://github.com/obfuscator-llvm/obfuscator.git
+        git clone -b llvm-4.0 https://github.com/obfuscator-llvm/obfuscator.git
         cd obfuscator
         git submodule update --init --recursive
 
-    - name: Build obfuscator-llvm
+    # Step 4: 创建构建目录
+    - name: Create build directory
+      run: mkdir -p obfuscator/build
+
+    # Step 5: 使用 cmake 配置构建
+    - name: Run cmake
       run: |
-        mkdir -p obfuscator/build
         cd obfuscator/build
-        cmake ..
-        make
+        cmake -DCMAKE_BUILD_TYPE=Release ../
+
+    # Step 6: 执行构建
+    - name: Build the project
+      run: |
+        cd obfuscator/build
+        make -j7
+
+    # Step 7: 安装编译产物
+    - name: Install obfuscator-llvm
+      run: |
+        cd obfuscator/build
         sudo make install
 
+    # Step 8: 验证是否安装成功
     - name: Verify Installation
       run: |
-        # 验证 obfuscator 是否已正确安装
         obfuscator-llvm --version
